@@ -129,6 +129,7 @@ class CallActions(llm.FunctionContext):
                                   ):
         """Called when the user confirms their appointment on a specific date. Use this tool only when they are certain about the date and time."""
         logger.info(f"confirming appointment for {self.participant.identity} on {date} at {time}")
+        return "reservation confirmed"
 
     @llm.ai_callable()
     async def detected_answering_machine(self):
