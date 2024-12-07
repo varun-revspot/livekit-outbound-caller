@@ -12,6 +12,5 @@
     "fileMatch": ["(^|/)requirements\\.txt$"]
   },
   "ignoreDeps": ["pip", "setuptools", "wheel"],
-  "schedule": ["daily"],
   "dependencyDashboard": true
 }
