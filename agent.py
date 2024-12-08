@@ -118,6 +118,7 @@ class CallActions(llm.FunctionContext):
                                   ):
         """Called when the user asks about alternative appointment availability"""
         logger.info(f"looking up availability for {self.participant.identity} on {date}")
+        asyncio.sleep(3)
         return json.dumps({
             "available_times": ["1pm", "2pm", "3pm"],
         })
@@ -166,11 +167,11 @@ def run_multimodal_agent(ctx: JobContext, participant: rtc.RemoteParticipant, in
         instructions=instructions,
         modalities=["audio", "text"],
     )
-    assistant = MultimodalAgent(
+    agent = MultimodalAgent(
         model=model,
         fnc_ctx=CallActions(api=ctx.api, participant=participant, room=ctx.room),
     )
-    assistant.start(ctx.room, participant)
+    agent.start(ctx.room, participant)
 
 
 def prewarm(proc: JobProcess):
