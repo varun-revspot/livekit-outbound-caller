@@ -48,7 +48,7 @@ async def entrypoint(ctx: JobContext):
     # `create_sip_participant` starts dialing the user
     await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
         room_name=ctx.room.name,
-        sip_trunk_id="ST_asPNrWESpHoB", # <ST_your-trunk-id>
+        sip_trunk_id="<ST_your-trunk-id>",
         sip_call_to=phone_number,
         participant_identity=user_identity,
     ))
