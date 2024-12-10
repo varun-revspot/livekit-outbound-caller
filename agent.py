@@ -4,6 +4,7 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 import json
+import os
 from time import perf_counter
 from typing import Annotated
 from livekit import rtc, api
@@ -16,9 +17,8 @@ from livekit.agents import (
     llm,
 )
 from livekit.agents.multimodal import MultimodalAgent
-from livekit.agents.pipeline import AgentCallContext, VoicePipelineAgent
+from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import deepgram, openai, silero, turn_detector
-from livekit.plugins import openai
 
 
 # load environment variables, this is optional, only used for local development
@@ -26,14 +26,16 @@ load_dotenv(dotenv_path=".env.local")
 logger = logging.getLogger("outbound-caller")
 logger.setLevel(logging.INFO)
 
+outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
 _default_instructions = (
     "You are a scheduling assistant for a dental practice. Your interface with user will be voice."
     "You will be on a call with a patient who has an upcoming appointment. Your goal is to confirm the appointment details."
     "As a customer service representative, you will be polite and professional at all times. Allow user to end the conversation."
 )
 
+
 async def entrypoint(ctx: JobContext):
-    global _default_instructions
+    global _default_instructions, outbound_trunk_id
     logger.info(f"connecting to room {ctx.room.name}")
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
@@ -43,15 +45,20 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"dialing {phone_number} to room {ctx.room.name}")
 
     # look up the user's phone number and appointment details
-    instructions = _default_instructions + "The customer's name is Jayden. His appointment is next Tuesday at 3pm."
+    instructions = (
+        _default_instructions
+        + "The customer's name is Jayden. His appointment is next Tuesday at 3pm."
+    )
 
     # `create_sip_participant` starts dialing the user
-    await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
-        room_name=ctx.room.name,
-        sip_trunk_id="<ST_your-trunk-id>",
-        sip_call_to=phone_number,
-        participant_identity=user_identity,
-    ))
+    await ctx.api.sip.create_sip_participant(
+        api.CreateSIPParticipantRequest(
+            room_name=ctx.room.name,
+            sip_trunk_id=outbound_trunk_id,
+            sip_call_to=phone_number,
+            participant_identity=user_identity,
+        )
+    )
 
     # a participant is created as soon as we start dialing
     participant = await ctx.wait_for_participant(identity=user_identity)
@@ -59,7 +66,7 @@ async def entrypoint(ctx: JobContext):
     # start the agent, either a VoicePipelineAgent or MultimodalAgent
     # this can be started before the user picks up. The agent will only start
     # speaking once the user answers the call.
-    #run_voice_pipeline_agent(ctx, participant, instructions)
+    # run_voice_pipeline_agent(ctx, participant, instructions)
     run_multimodal_agent(ctx, participant, instructions)
 
     # in addition, you can monitor the call status separately
@@ -89,7 +96,9 @@ class CallActions(llm.FunctionContext):
     Detect user intent and perform actions
     """
 
-    def __init__(self, *, api: api.LiveKitAPI, participant: rtc.RemoteParticipant, room: rtc.Room):
+    def __init__(
+        self, *, api: api.LiveKitAPI, participant: rtc.RemoteParticipant, room: rtc.Room
+    ):
         super().__init__()
 
         self.api = api
@@ -98,10 +107,12 @@ class CallActions(llm.FunctionContext):
 
     async def hangup(self):
         try:
-            await self.api.room.remove_participant(api.RoomParticipantIdentity(
-                room=self.room.name,
-                identity=self.participant.identity,
-            ))
+            await self.api.room.remove_participant(
+                api.RoomParticipantIdentity(
+                    room=self.room.name,
+                    identity=self.participant.identity,
+                )
+            )
         except Exception as e:
             # it's possible that the user has already hung up, this error can be ignored
             logger.info(f"received error while ending call: {e}")
@@ -113,23 +124,31 @@ class CallActions(llm.FunctionContext):
         await self.hangup()
 
     @llm.ai_callable()
-    async def look_up_availability(self,
-                                  date: Annotated[str, "The date of the appointment to check availability for"],
-                                  ):
+    async def look_up_availability(
+        self,
+        date: Annotated[str, "The date of the appointment to check availability for"],
+    ):
         """Called when the user asks about alternative appointment availability"""
-        logger.info(f"looking up availability for {self.participant.identity} on {date}")
+        logger.info(
+            f"looking up availability for {self.participant.identity} on {date}"
+        )
         asyncio.sleep(3)
-        return json.dumps({
-            "available_times": ["1pm", "2pm", "3pm"],
-        })
+        return json.dumps(
+            {
+                "available_times": ["1pm", "2pm", "3pm"],
+            }
+        )
 
     @llm.ai_callable()
-    async def confirm_appointment(self,
-                                  date: Annotated[str, "date of the appointment"],
-                                  time: Annotated[str, "time of the appointment"],
-                                  ):
+    async def confirm_appointment(
+        self,
+        date: Annotated[str, "date of the appointment"],
+        time: Annotated[str, "time of the appointment"],
+    ):
         """Called when the user confirms their appointment on a specific date. Use this tool only when they are certain about the date and time."""
-        logger.info(f"confirming appointment for {self.participant.identity} on {date} at {time}")
+        logger.info(
+            f"confirming appointment for {self.participant.identity} on {date} at {time}"
+        )
         return "reservation confirmed"
 
     @llm.ai_callable()
@@ -139,7 +158,9 @@ class CallActions(llm.FunctionContext):
         await self.hangup()
 
 
-def run_voice_pipeline_agent(ctx: JobContext, participant: rtc.RemoteParticipant, instructions: str):
+def run_voice_pipeline_agent(
+    ctx: JobContext, participant: rtc.RemoteParticipant, instructions: str
+):
     logger.info("starting voice pipeline agent")
 
     initial_ctx = llm.ChatContext().append(
@@ -160,7 +181,9 @@ def run_voice_pipeline_agent(ctx: JobContext, participant: rtc.RemoteParticipant
     agent.start(ctx.room, participant)
 
 
-def run_multimodal_agent(ctx: JobContext, participant: rtc.RemoteParticipant, instructions: str):
+def run_multimodal_agent(
+    ctx: JobContext, participant: rtc.RemoteParticipant, instructions: str
+):
     logger.info("starting multimodal agent")
 
     model = openai.realtime.RealtimeModel(
@@ -179,6 +202,10 @@ def prewarm(proc: JobProcess):
 
 
 if __name__ == "__main__":
+    if not outbound_trunk_id or not outbound_trunk_id.startswith("ST_"):
+        raise ValueError(
+            "SIP_OUTBOUND_TRUNK_ID is not set. Please follow the guide at https://docs.livekit.io/agents/quickstarts/outbound-calls/ to set it up."
+        )
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,

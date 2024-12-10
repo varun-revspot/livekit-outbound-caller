@@ -19,7 +19,16 @@ It has two modes:
 - **VoicePipelineAgent**: uses a voice pipeline of STT, LLM, and TTS for the call.
 - **MultimodalAgent**: uses OpenAI's realtime speech to speech model.
 
-The guide for this example is available at https://docs.livekit.io/agents/quickstarts/outbound-calls/
+The guide for this example is available at https://docs.livekit.io/agents/quickstarts/outbound-calls/. Please ensure you have a SIP outbound trunk configured.
+
+## Features
+
+This example demonstrates the following features:
+
+- Making outbound calls
+- Detecting voicemail
+- Looking up availability via function calling
+- Detecting intent to end the call
 
 ## Dev Setup
 
@@ -39,13 +48,8 @@ Set up the environment by copying `.env.example` to `.env.local` and filling in 
 - `LIVEKIT_API_KEY`
 - `LIVEKIT_API_SECRET`
 - `OPENAI_API_KEY`
-- `DEEPGRAM_API_KEY`
-
-You can also do this automatically using the LiveKit CLI:
-
-```shell
-lk app env
-```
+- `SIP_OUTBOUND_TRUNK_ID`
+- `DEEPGRAM_API_KEY` - optional, only needed for VoicePipelineAgent
 
 Run the agent:
 
