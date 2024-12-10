@@ -7,10 +7,6 @@
       "automerge": true
     }
   ],
-  "pip": {
-    "enabled": true,
-    "fileMatch": ["(^|/)requirements\\.txt$"]
-  },
   "ignoreDeps": ["pip", "setuptools", "wheel"],
   "dependencyDashboard": true
 }

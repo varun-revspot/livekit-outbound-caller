@@ -19,7 +19,7 @@ It has two modes:
 - **VoicePipelineAgent**: uses a voice pipeline of STT, LLM, and TTS for the call.
 - **MultimodalAgent**: uses OpenAI's realtime speech to speech model.
 
-The guide for this example is available at https://docs.livekit.io/agents/quickstarts/outbound-calls/. Please ensure you have a SIP outbound trunk configured.
+The guide for this example is available at https://docs.livekit.io/agents/quickstarts/outbound-calls/. Make sure a SIP outbound trunk is configured before trying this example.
 
 ## Features
 
