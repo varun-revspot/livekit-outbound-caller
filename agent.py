@@ -18,7 +18,7 @@ from livekit.agents import (
 )
 from livekit.agents.multimodal import MultimodalAgent
 from livekit.agents.pipeline import VoicePipelineAgent
-from livekit.plugins import deepgram, openai, silero, turn_detector
+from livekit.plugins import deepgram, openai, silero
 
 
 # load environment variables, this is optional, only used for local development
@@ -173,7 +173,6 @@ def run_voice_pipeline_agent(
         stt=deepgram.STT(model="nova-2-phonecall"),
         llm=openai.LLM(),
         tts=openai.TTS(),
-        turn_detector=turn_detector.EOUModel(),
         chat_ctx=initial_ctx,
         fnc_ctx=CallActions(api=ctx.api, participant=participant, room=ctx.room),
     )
