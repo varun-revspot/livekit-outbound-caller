@@ -16,17 +16,17 @@ from livekit.agents import (
     RunContext,
     get_job_context,
     cli,
-    RoomInputOptions,
     WorkerOptions,
+    RoomInputOptions,
 )
 from livekit.plugins import (
     deepgram,
     openai,
     cartesia,
     silero,
-    turn_detector,
-    noise_cancellation,
+    noise_cancellation,  # noqa: F401
 )
+from livekit.plugins.turn_detector.english import EnglishModel
 
 
 # load environment variables, this is optional, only used for local development
@@ -114,7 +114,7 @@ class OutboundCaller(Agent):
         # let the agent finish speaking
         current_speech = ctx.session.current_speech
         if current_speech:
-            await current_speech.done()
+            await current_speech.wait_for_playout()
 
         await self.hangup()
 
@@ -164,7 +164,6 @@ class OutboundCaller(Agent):
 
 
 async def entrypoint(ctx: JobContext):
-    global _default_instructions, outbound_trunk_id
     logger.info(f"connecting to room {ctx.room.name}")
     await ctx.connect()
 
@@ -173,6 +172,7 @@ async def entrypoint(ctx: JobContext):
     # - phone_number: the phone number to dial
     # - transfer_to: the phone number to transfer the call to when requested
     dial_info = json.loads(ctx.job.metadata)
+    participant_identity = phone_number = dial_info["phone_number"]
 
     # look up the user's phone number and appointment details
     agent = OutboundCaller(
@@ -183,7 +183,7 @@ async def entrypoint(ctx: JobContext):
 
     # the following uses GPT-4o, Deepgram and Cartesia
     session = AgentSession(
-        turn_detection=turn_detector.EOUModel(),
+        turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
@@ -195,14 +195,13 @@ async def entrypoint(ctx: JobContext):
 
     # start the session first before dialing, to ensure that when the user picks up
     # the agent does not miss anything the user says
-    # creating a task for this because session.start does not return until the participant is available
-    asyncio.create_task(
+    session_started = asyncio.create_task(
         session.start(
             agent=agent,
             room=ctx.room,
             room_input_options=RoomInputOptions(
                 # enable Krisp background voice and noise removal
-                noise_cancellation=noise_cancellation.BVC(),
+                # noise_cancellation=noise_cancellation.BVC(),
             ),
         )
     )
@@ -213,15 +212,18 @@ async def entrypoint(ctx: JobContext):
             api.CreateSIPParticipantRequest(
                 room_name=ctx.room.name,
                 sip_trunk_id=outbound_trunk_id,
-                sip_call_to=dial_info["phone_number"],
-                participant_identity="phone_user",
+                sip_call_to=phone_number,
+                participant_identity=participant_identity,
                 # function blocks until user answers the call, or if the call fails
                 wait_until_answered=True,
             )
         )
 
-        # a participant phone user is now available
-        participant = await ctx.wait_for_participant(identity="phone_user")
+        # wait for the agent session start and participant join
+        await session_started
+        participant = await ctx.wait_for_participant(identity=participant_identity)
+        logger.info(f"participant joined: {participant.identity}")
+
         agent.set_participant(participant)
 
     except api.TwirpError as e:
