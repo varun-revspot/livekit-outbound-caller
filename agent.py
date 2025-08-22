@@ -27,6 +27,7 @@ from livekit.plugins import (
     noise_cancellation,  # noqa: F401
 )
 from livekit.plugins.turn_detector.english import EnglishModel
+from livekit.api import RoomParticipantIdentity
 
 
 # load environment variables, this is optional, only used for local development
@@ -51,7 +52,7 @@ class OutboundCaller(Agent):
             You will be on a call with a patient who has an upcoming appointment. Your goal is to confirm the appointment details.
             As a customer service representative, you will be polite and professional at all times. Allow user to end the conversation.
 
-            When the user would like to be transferred to a human agent, first confirm with them. upon confirmation, use the transfer_call tool.
+            When the user would like to be transferred to a human agent, use the transfer_call tool.
             The customer's name is {name}. His appointment is on {appointment_time}.
             """
         )
@@ -90,13 +91,34 @@ class OutboundCaller(Agent):
 
         job_ctx = get_job_context()
         try:
-            await job_ctx.api.sip.transfer_sip_participant(
-                api.TransferSIPParticipantRequest(
+            # await job_ctx.api.sip.transfer_sip_participant(
+            #     api.TransferSIPParticipantRequest(
+            #         room_name=job_ctx.room.name,
+            #         participant_identity=self.participant.identity,
+            #         transfer_to=f"tel:{transfer_to}",
+            #     )
+            # )
+
+            await job_ctx.api.sip.create_sip_participant(
+            api.CreateSIPParticipantRequest(
                     room_name=job_ctx.room.name,
-                    participant_identity=self.participant.identity,
-                    transfer_to=f"tel:{transfer_to}",
+                    sip_trunk_id=outbound_trunk_id,
+                    sip_call_to=transfer_to,
+                    participant_identity=transfer_to,
+                    # function blocks until user answers the call, or if the call fails
+                    wait_until_answered=True,
                 )
             )
+
+            
+            participant = await job_ctx.wait_for_participant(identity=transfer_to)
+            logger.info(f"participant joined: {participant.identity}")
+
+            await job_ctx.api.room.remove_participant(RoomParticipantIdentity(
+                room=job_ctx.room.name,
+                identity=job_ctx.room.local_participant.identity
+            ))
+            logger.info(f"Agent disconnected")
 
             logger.info(f"transferred call to {transfer_to}")
         except Exception as e:
@@ -176,7 +198,7 @@ async def entrypoint(ctx: JobContext):
 
     # look up the user's phone number and appointment details
     agent = OutboundCaller(
-        name="Jayden",
+        name="Varun",
         appointment_time="next Tuesday at 3pm",
         dial_info=dial_info,
     )
@@ -187,7 +209,7 @@ async def entrypoint(ctx: JobContext):
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
-        tts=cartesia.TTS(),
+        tts=openai.TTS(),
         llm=openai.LLM(model="gpt-4o"),
         # you can also use a speech-to-speech model like OpenAI's Realtime API
         # llm=openai.realtime.RealtimeModel()
